@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🌐 Lang Switcher</h1>
+      <div class="current-lang">
+        当前: <span id="currentLang">检测中...</span>
+      </div>
+    </header>
+
+    <section class="lang-list" id="langList"></section>
+
+    <section class="custom-section">
+      <div class="custom-input-row">
+        <input type="text" id="customLang" placeholder="自定义语言码 (如 fr-FR)">
+        <button id="addCustomBtn" class="btn-add" title="添加">+</button>
+      </div>
+    </section>
+
+    <section class="cookie-config">
+      <details>
+        <summary>⚙️ Cookie 设置</summary>
+        <div class="config-form">
+          <label>
+            Cookie 名称
+            <input type="text" id="cookieName" value="lang" placeholder="lang">
+          </label>
+          <label>
+            Cookie Path
+            <input type="text" id="cookiePath" value="/" placeholder="/">
+          </label>
+          <label>
+            <input type="checkbox" id="autoReload" checked>
+            切换后自动刷新页面
+          </label>
+        </div>
+      </details>
+    </section>
+
+    <footer>
+      <span class="hint">点击语言即可一键切换</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
