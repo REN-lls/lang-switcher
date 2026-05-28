@@ -12,6 +12,7 @@ const STORAGE_KEY_CONFIG = "cookieConfig";
 
 let currentTab = null;
 let currentCookieValue = null;
+let currentCookieDomain = null;
 
 async function init() {
   currentTab = await getCurrentTab();
@@ -35,8 +36,15 @@ async function detectCurrentLang() {
   const config = await getConfig();
   const url = currentTab.url;
   try {
-    const cookie = await chrome.cookies.get({ url, name: config.cookieName });
-    return cookie?.value || null;
+    const cookies = await chrome.cookies.getAll({ url, name: config.cookieName });
+    if (cookies.length === 0) return null;
+
+    // 优先取广域 cookie（domain 以 . 开头），这才是服务端实际读到的
+    const domainCookie = cookies.find(c => c.domain.startsWith("."));
+    const effective = domainCookie || cookies[0];
+
+    currentCookieDomain = effective.domain;
+    return effective.value;
   } catch {
     return null;
   }
@@ -45,7 +53,9 @@ async function detectCurrentLang() {
 function renderCurrentLang() {
   const el = document.getElementById("currentLang");
   if (currentCookieValue) {
-    el.textContent = currentCookieValue;
+    el.textContent = currentCookieDomain
+      ? `${currentCookieValue}  (${currentCookieDomain})`
+      : currentCookieValue;
   } else {
     el.textContent = "未设置";
     el.style.color = "#999";
@@ -99,14 +109,45 @@ async function switchLang(langCode) {
 
   try {
     const urlObj = new URL(url);
-    await chrome.cookies.set({
-      url: `${urlObj.protocol}//${urlObj.host}`,
+
+    const existingCookies = await chrome.cookies.getAll({
+      url,
       name: config.cookieName,
-      value: langCode,
-      path: config.cookiePath,
     });
 
+    if (existingCookies.length > 0) {
+      for (const cookie of existingCookies) {
+        const domain = cookie.domain;
+        const host = domain.startsWith(".") ? domain.slice(1) : domain;
+        await chrome.cookies.set({
+          url: `${urlObj.protocol}//${host}`,
+          name: config.cookieName,
+          value: langCode,
+          path: cookie.path,
+          domain,
+          secure: cookie.secure,
+          httpOnly: cookie.httpOnly,
+          sameSite: cookie.sameSite || "unspecified",
+          expirationDate: cookie.expirationDate,
+        });
+      }
+    } else {
+      const setCookieOpts = {
+        url: `${urlObj.protocol}//${urlObj.host}`,
+        name: config.cookieName,
+        value: langCode,
+        path: config.cookiePath,
+      };
+      if (config.cookieDomain) {
+        setCookieOpts.domain = config.cookieDomain;
+      }
+      await chrome.cookies.set(setCookieOpts);
+    }
+
     currentCookieValue = langCode;
+    currentCookieDomain = existingCookies.length > 0
+      ? (existingCookies.find(c => c.domain.startsWith(".")) || existingCookies[0]).domain
+      : config.cookieDomain || urlObj.host;
     renderCurrentLang();
     await renderLangList();
     showToast(`✅ 已切换至 ${langCode}`);
@@ -160,6 +201,7 @@ async function getConfig() {
   return data[STORAGE_KEY_CONFIG] || {
     cookieName: "lang",
     cookiePath: "/",
+    cookieDomain: "",
     autoReload: true,
   };
 }
@@ -168,6 +210,7 @@ async function saveConfig() {
   const config = {
     cookieName: document.getElementById("cookieName").value || "lang",
     cookiePath: document.getElementById("cookiePath").value || "/",
+    cookieDomain: document.getElementById("cookieDomain").value.trim(),
     autoReload: document.getElementById("autoReload").checked,
   };
   await chrome.storage.local.set({ [STORAGE_KEY_CONFIG]: config });
@@ -177,6 +220,7 @@ async function loadConfig() {
   const config = await getConfig();
   document.getElementById("cookieName").value = config.cookieName;
   document.getElementById("cookiePath").value = config.cookiePath;
+  document.getElementById("cookieDomain").value = config.cookieDomain || "";
   document.getElementById("autoReload").checked = config.autoReload;
 }
 
@@ -219,6 +263,7 @@ document.getElementById("customLang").addEventListener("keydown", (e) => {
 
 document.getElementById("cookieName").addEventListener("change", saveConfig);
 document.getElementById("cookiePath").addEventListener("change", saveConfig);
+document.getElementById("cookieDomain").addEventListener("change", saveConfig);
 document.getElementById("autoReload").addEventListener("change", saveConfig);
 
 init();
